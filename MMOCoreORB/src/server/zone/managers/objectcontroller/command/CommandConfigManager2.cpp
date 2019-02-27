@@ -510,6 +510,7 @@ void CommandConfigManager::registerCommands2() {
 	commandFactory.registerCommand<ConcealCommand>(String("conceal").toLowerCase());
 	commandFactory.registerCommand<ConcealShotCommand>(String("concealShot").toLowerCase());
 	commandFactory.registerCommand<ConfusionShotCommand>(String("confusionShot").toLowerCase());
+	commandFactory.registerCommand<CounterAttackCommand>(String("counterAttack").toLowerCase());
 	commandFactory.registerCommand<ConsentCommand>(String("consent").toLowerCase());
 	commandFactory.registerCommand<CorpseCommand>(String("corpse").toLowerCase());
 	commandFactory.registerCommand<CoupDeGraceCommand>(String("coupDeGrace").toLowerCase());
