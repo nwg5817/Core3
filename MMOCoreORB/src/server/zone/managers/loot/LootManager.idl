@@ -86,6 +86,33 @@ class LootManager extends ManagedService implements Logger {
 	private transient SortedVector<string> lootablePolearmMods;
 	@dereferenced
 	private transient SortedVector<string> lootableHeavyWeaponMods;
+	@dereferenced
+	private transient SortedVector<string> lootableAAcombatMods;
+	@dereferenced
+	private transient SortedVector<string> lootableCAcombatMods;
+	@dereferenced
+	private transient SortedVector<string> lootableCraftingMods;
+	@dereferenced
+	private transient SortedVector<string> lootableAAdefenseMods;
+	@dereferenced
+	private transient SortedVector<string> lootableCAdefenseMods;
+	@dereferenced
+	private transient SortedVector<string> lootableJediMods;
+	@dereferenced
+	private transient SortedVector<string> lootableAAmedicMods;
+	@dereferenced
+	private transient SortedVector<string> lootableCAmedicMods;
+	@dereferenced
+	private transient SortedVector<string> lootableAAscoutMods;
+	@dereferenced
+	private transient SortedVector<string> lootableCAscoutMods;
+	@dereferenced
+	private transient SortedVector<string> lootableSocialMods;
+	@dereferenced
+	private transient SortedVector<string> lootableAAutilityMods;
+	@dereferenced
+	private transient SortedVector<string> lootableCAutilityMods;
+
 	
 	@dereferenced
 	private transient VectorMap<string, Reference<CrystalData> > crystalData;
@@ -109,7 +136,20 @@ class LootManager extends ManagedService implements Logger {
 		lootableCarbineMods.setNoDuplicateInsertPlan();
 		lootablePolearmMods.setNoDuplicateInsertPlan();
 		lootableHeavyWeaponMods.setNoDuplicateInsertPlan();
-		
+		lootableAAcombatMods.setNoDuplicateInsertPlan();
+		lootableCAcombatMods.setNoDuplicateInsertPlan();
+		lootableCraftingMods.setNoDuplicateInsertPlan();
+		lootableAAdefenseMods.setNoDuplicateInsertPlan();
+		lootableCAdefenseMods.setNoDuplicateInsertPlan();
+		lootableJediMods.setNoDuplicateInsertPlan();
+		lootableAAmedicMods.setNoDuplicateInsertPlan();
+		lootableCAmedicMods.setNoDuplicateInsertPlan();
+		lootableAAscoutMods.setNoDuplicateInsertPlan();
+		lootableCAscoutMods.setNoDuplicateInsertPlan();
+		lootableSocialMods.setNoDuplicateInsertPlan();
+		lootableAAutilityMods.setNoDuplicateInsertPlan();
+		lootableCAutilityMods.setNoDuplicateInsertPlan();
+				
 		exceptionalChance = 0.0;
 		exceptionalModifier = 0.0;
 		
@@ -161,7 +201,10 @@ class LootManager extends ManagedService implements Logger {
 	public native TangibleObject createLootObject(LootItemTemplate templateObject, int level, boolean maxCondition = false);
 	
 	@local
-	public native string getRandomLootableMod( unsigned int sceneObjectType );	
+	public native TangibleObject createLootAttachment(LootItemTemplate templateObject, final string modName, int level);
+	
+	@local
+	public native string getRandomLootableMod( unsigned int sceneObjectType, final string lootTemplateName);
 	
 	public native int calculateLootCredits(int level);
 

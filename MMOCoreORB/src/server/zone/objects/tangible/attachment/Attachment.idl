@@ -2,7 +2,7 @@
 				Copyright <SWGEmu>
 		See file COPYING for copying conditions.*/
 
-package server.zone.objects.tangible.attachement;
+package server.zone.objects.tangible.attachment;
 
 import server.zone.objects.tangible.TangibleObject;
 include server.zone.objects.manufactureschematic.craftingvalues.CraftingValues;
@@ -12,7 +12,7 @@ import server.zone.packets.scene.AttributeListMessage;
 include server.zone.objects.scene.SceneObjectType;
 import system.util.HashTable;
 
-@json
+
 class Attachment extends TangibleObject {
 	protected int attachmentType;
 
@@ -33,7 +33,8 @@ class Attachment extends TangibleObject {
 	public native void initializeTransientMembers();
 
 	@local
-	public native void updateCraftingValues(CraftingValues values, boolean firstUpdate);
+	 public native void updateCraftingValues(CraftingValues values, boolean firstUpdate, final string lootTemplateName);
+	 public native void updateAttachmentValues(final string modName, int value);
 
 	public native void initializeMembers();
 

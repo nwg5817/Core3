@@ -13,6 +13,7 @@
 #include "templates/LootItemTemplate.h"
 #include "templates/LootGroupTemplate.h"
 #include "server/zone/ZoneServer.h"
+#include "server/zone/managers/stringid/StringIdManager.h"
 #include "LootGroupMap.h"
 #include "server/zone/objects/tangible/component/lightsaber/LightsaberCrystalComponent.h"
 
@@ -306,7 +307,9 @@ TangibleObject* LootManagerImplementation::createLootObject(LootItemTemplate* te
 
 	if (System::random(legendaryChance) >= legendaryChance - adjustment) {
 		UnicodeString newName = prototype->getDisplayedName() + " (Legendary)";
-		prototype->setCustomObjectName(newName, false);
+		if(!prototype->isAttachment()){
+ 			prototype->setCustomObjectName(newName, false);
+		}
 
 		excMod = legendaryModifier;
 
@@ -315,7 +318,9 @@ TangibleObject* LootManagerImplementation::createLootObject(LootItemTemplate* te
 		legendaryLooted.increment();
 	} else if (System::random(exceptionalChance) >= exceptionalChance - adjustment) {
 		UnicodeString newName = prototype->getDisplayedName() + " (Exceptional)";
-		prototype->setCustomObjectName(newName, false);
+		if(!prototype->isAttachment()){
+			prototype->setCustomObjectName(newName, false);
+			}
 
 		excMod = exceptionalModifier;
 
@@ -468,13 +473,126 @@ TangibleObject* LootManagerImplementation::createLootObject(LootItemTemplate* te
 	setSockets(prototype, craftingValues);
 
 	// Update the Tano with new values
-	prototype->updateCraftingValues(craftingValues, true);
+	prototype->updateCraftingValues(craftingValues, true);		if(!prototype->isAttachment()){
+		prototype->updateCraftingValues(craftingValues, true);
+	}
 
 	//add some condition damage where appropriate
 	if (!maxCondition)
 		addConditionDamage(prototype, craftingValues);
 
-	delete craftingValues;
+	if(!prototype->isAttachment()){
+		delete craftingValues;
+	}
+
+ 	// Update object name with mod stat if is attachment
+	if(prototype->isAttachment()){
+		Attachment* attachment = cast<Attachment*>( prototype.get());
+
+ 		// We want to override the UpdateCraftingValues here for Attachments to enable us
+		// to create new specific loot groups for attachments! --Boogles
+		attachment->updateCraftingValues(craftingValues, true, templateObject->getTemplateName());
+		delete craftingValues;
+
+ 		HashTable<String, int>* mods = attachment->getSkillMods();
+		HashTableIterator<String, int> iterator = mods->iterator();
+		StringId attachmentName;
+		String key = "";
+		int value = 0;
+		int last = 0;
+		String attachmentType = "[AA] ";
+		String attachmentCustomName = "";
+
+ 		if(attachment->isClothingAttachment()){
+			attachmentType = "[CA] ";
+		}
+
+ 		for(int i = 0; i < mods->size(); ++i) {
+			iterator.getNextKeyAndValue(key, value);
+
+ 			if(value > last){
+				last = value;
+				attachmentName.setStringId("stat_n", key);
+				prototype->setObjectName(attachmentName,false);
+				attachmentCustomName = attachmentType + prototype->getDisplayedName() + " " + String::valueOf(value);
+			}
+		}
+		prototype->setCustomObjectName(attachmentCustomName,false);
+	}
+
+ 	return prototype;
+}
+
+ TangibleObject* LootManagerImplementation::createLootAttachment(LootItemTemplate* templateObject, const String& modName, int value) {
+
+ 	const String& directTemplateObject = templateObject->getDirectObjectTemplate();
+
+ 	ManagedReference<TangibleObject*> prototype = zoneServer->createObject(directTemplateObject.hashCode(), 2).castTo<TangibleObject*>();
+
+ 	if (prototype == NULL) {
+		error("could not create loot object: " + directTemplateObject);
+		return NULL;
+	}
+
+ 	Locker objLocker(prototype);
+
+ 	prototype->createChildObjects();
+
+ 	String serial = craftingManager->generateSerial();
+	prototype->setSerialNumber(serial);
+
+
+ 	ValuesMap valuesMap = templateObject->getValuesMapCopy();
+	CraftingValues* craftingValues = new CraftingValues(valuesMap);
+
+ 	setInitialObjectStats(templateObject, craftingValues, prototype);
+
+ 	setCustomObjectName(prototype, templateObject);
+
+ 	String subtitle;
+
+ 	for (int i = 0; i < craftingValues->getExperimentalPropertySubtitleSize(); ++i) {
+		subtitle = craftingValues->getExperimentalPropertySubtitle(i);
+
+ 		if (subtitle == "hitpoints" && !prototype->isComponent()) {
+			continue;
+		}
+
+ 		float min = craftingValues->getMinValue(subtitle);
+		float max = craftingValues->getMaxValue(subtitle);
+	}
+
+
+ 	if(prototype->isAttachment()){
+		Attachment* attachment = cast<Attachment*>( prototype.get());
+		attachment->updateAttachmentValues(modName, value);
+		delete craftingValues;
+
+ 		HashTable<String, int>* mods = attachment->getSkillMods();
+		HashTableIterator<String, int> iterator = mods->iterator();
+		StringId attachmentName;
+		String key = "";
+		int value = 0;
+		int last = 0;
+		String attachmentType = "[AA] ";
+		String attachmentCustomName = "";
+
+ 		if(attachment->isClothingAttachment()){
+			attachmentType = "[CA] ";
+		}
+
+ 		for(int i = 0; i < mods->size(); ++i) {
+			iterator.getNextKeyAndValue(key, value);
+
+ 			if(value > last){
+				last = value;
+				attachmentName.setStringId("stat_n", key);
+				prototype->setObjectName(attachmentName,false);
+				attachmentCustomName = attachmentType + prototype->getDisplayedName() + " " + String::valueOf(value);
+			}
+		}
+		prototype->setCustomObjectName(attachmentCustomName,false);
+	}
 
 	return prototype;
 }
@@ -527,8 +645,8 @@ void LootManagerImplementation::setSkillMods(TangibleObject* object, LootItemTem
 
 			if(mod == 0)
 				mod = 1;
-
-			String modName = getRandomLootableMod( object->getGameObjectType() );
+			// This is where additional mods are addded for multi-mod attachments.
+			String modName = getRandomLootableMod(object->getGameObjectType(), templateObject->getTemplateName());
 			if( !modName.isEmpty() )
 				additionalMods.put(modName, mod);
 		}
@@ -553,12 +671,51 @@ void LootManagerImplementation::setSkillMods(TangibleObject* object, LootItemTem
 		object->addMagicBit(false);
 }
 
-String LootManagerImplementation::getRandomLootableMod( unsigned int sceneObjectType ) {
-	if( sceneObjectType == SceneObjectType::ARMORATTACHMENT ){
+String LootManagerImplementation::getRandomLootableMod(unsigned int sceneObjectType, const String& lootTemplateName) {
+	if( sceneObjectType == SceneObjectType::ARMORATTACHMENT && lootTemplateName == "attachment_armor"){
 		return lootableArmorAttachmentMods.get(System::random(lootableArmorAttachmentMods.size() - 1));
 	}
-	else if( sceneObjectType == SceneObjectType::CLOTHINGATTACHMENT ){
+	else if( sceneObjectType == SceneObjectType::ARMORATTACHMENT && lootTemplateName == "attachment_combat_armor"){
+		return lootableAAcombatMods.get(System::random(lootableAAcombatMods.size() - 1));
+	}
+	else if( sceneObjectType == SceneObjectType::ARMORATTACHMENT && lootTemplateName == "attachment_defense_armor"){
+		return lootableAAdefenseMods.get(System::random(lootableAAdefenseMods.size() - 1));
+	}
+	else if( sceneObjectType == SceneObjectType::ARMORATTACHMENT && lootTemplateName == "attachment_medic_armor"){
+		return lootableAAmedicMods.get(System::random(lootableAAmedicMods.size() - 1));
+	}
+	else if( sceneObjectType == SceneObjectType::ARMORATTACHMENT && lootTemplateName == "attachment_scout_armor"){
+		return lootableAAscoutMods.get(System::random(lootableAAscoutMods.size() - 1));
+	}
+	else if( sceneObjectType == SceneObjectType::ARMORATTACHMENT && lootTemplateName == "attachment_utility_armor"){
+		return lootableAAutilityMods.get(System::random(lootableAAutilityMods.size() - 1));
+	}
+	else if( sceneObjectType == SceneObjectType::CLOTHINGATTACHMENT && lootTemplateName == "attachment_clothing"){
 		return lootableClothingAttachmentMods.get(System::random(lootableClothingAttachmentMods.size() - 1));
+	}
+	else if( sceneObjectType == SceneObjectType::CLOTHINGATTACHMENT && lootTemplateName == "attachment_combat_clothing"){
+		return lootableCAcombatMods.get(System::random(lootableCAcombatMods.size() - 1));
+	}
+	else if( sceneObjectType == SceneObjectType::CLOTHINGATTACHMENT && lootTemplateName == "attachment_crafting_clothing"){
+		return lootableCraftingMods.get(System::random(lootableCraftingMods.size() - 1));
+	}
+	else if( sceneObjectType == SceneObjectType::CLOTHINGATTACHMENT && lootTemplateName == "attachment_defense_clothing"){
+		return lootableCAdefenseMods.get(System::random(lootableCAdefenseMods.size() - 1));
+	}
+	else if( sceneObjectType == SceneObjectType::CLOTHINGATTACHMENT && lootTemplateName == "attachment_jedi_clothing"){
+		return lootableJediMods.get(System::random(lootableJediMods.size() - 1));
+	}
+	else if( sceneObjectType == SceneObjectType::CLOTHINGATTACHMENT && lootTemplateName == "attachment_medic_clothing"){
+		return lootableCAmedicMods.get(System::random(lootableCAmedicMods.size() - 1));
+	}
+	else if( sceneObjectType == SceneObjectType::CLOTHINGATTACHMENT && lootTemplateName == "attachment_scout_clothing"){
+		return lootableCAscoutMods.get(System::random(lootableCAscoutMods.size() - 1));
+	}
+	else if( sceneObjectType == SceneObjectType::CLOTHINGATTACHMENT && lootTemplateName == "attachment_social_clothing"){
+		return lootableSocialMods.get(System::random(lootableSocialMods.size() - 1));
+	}
+	else if( sceneObjectType == SceneObjectType::CLOTHINGATTACHMENT && lootTemplateName == "attachment_utility_clothing"){
+		return lootableCAutilityMods.get(System::random(lootableCAutilityMods.size() - 1));
 	}
 	else if( sceneObjectType == SceneObjectType::ARMOR || sceneObjectType == SceneObjectType::BODYARMOR ||
 			 sceneObjectType == SceneObjectType::HEADARMOR || sceneObjectType == SceneObjectType::MISCARMOR ||
