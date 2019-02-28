@@ -58,6 +58,7 @@
 #include "server/zone/objects/player/sessions/TradeSession.h"
 #include "server/zone/objects/player/events/StoreSpawnedChildrenTask.h"
 #include "server/zone/objects/player/events/RemoveSpouseTask.h"
+#include "server/zone/objects/player/events/RemoveBondTask.h"
 #include "server/zone/objects/player/events/PvpTefRemovalTask.h"
 #include "server/zone/managers/visibility/VisibilityManager.h"
 #include "server/zone/managers/jedi/JediManager.h"
@@ -2306,6 +2307,34 @@ void PlayerObjectImplementation::destroyObjectFromDatabase(bool destroyContained
 
 			if (spouseGhost != nullptr) {
 				RemoveSpouseTask* task = new RemoveSpouseTask(spouse);
+				task->execute();
+			}
+		}
+	}
+
+	if (isPadawanBonded()) {
+		PlayerManager* playerManager = server->getPlayerManager();
+		ManagedReference<CreatureObject*> master = playerManager->getPlayer(masterName);
+
+		if (master != nullptr) {
+			PlayerObject* masterGhost = master->getPlayerObject();
+
+			if (masterGhost != nullptr) {
+				RemoveBondTask* task = new RemoveBondTask(master);
+				task->execute();
+			}
+		}
+	}
+
+	if (isMasterBonded()) {
+		PlayerManager* playerManager = server->getPlayerManager();
+		ManagedReference<CreatureObject*> padawan = playerManager->getPlayer(padawanName);
+
+		if (padawan != nullptr) {
+			PlayerObject* masterGhost = padawan->getPlayerObject();
+
+			if (masterGhost != nullptr) {
+				RemoveBondTask* task = new RemoveBondTask(padawan);
 				task->execute();
 			}
 		}

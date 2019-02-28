@@ -38,6 +38,17 @@ void RingObjectMenuComponent::fillObjectMenuResponse(SceneObject* sceneObject, O
 		}
 	}
 
+	if (!wearable->isEquipped() && !wearable->isNoTrade()) {
+		if (ghost->isPadawanBonded() || ghost->isMasterBonded()) {
+			menuResponse->addRadialMenuItem(24, 3, "Unbond");
+		} else {
+			uint64 targetID = player->getTargetID();
+			ManagedReference<CreatureObject*> target = server->getObject(targetID, true).castTo<CreatureObject*>();
+			if (target != NULL && target->isPlayerCreature())
+				menuResponse->addRadialMenuItem(199, 3, "Force Bond"); // Propose Unity
+		}
+	}
+
 	TangibleObjectMenuComponent::fillObjectMenuResponse(sceneObject, menuResponse, player);
 
 }
@@ -71,7 +82,37 @@ int RingObjectMenuComponent::handleObjectMenuSelect(SceneObject* sceneObject, Cr
 			playerManager->promptDivorce(player);
 
 		return 0;
+
+	} else if (selectedID == 199) { // Propose Bond
+		if (!sceneObject->isASubChildOf(player))
+			return 0;
+
+		ManagedReference<SceneObject*> target = player->getZoneServer()->getObject(player->getTargetID());
+
+		if (target != NULL && target->isPlayerCreature()) {
+			PlayerManager* playerManager = player->getZoneServer()->getPlayerManager();
+
+			if (playerManager != NULL)
+				playerManager->proposeBond(player, cast<CreatureObject*>(target.get()), sceneObject);
+
+			return 0;
+		} else {
+			player->sendSystemMessage("@unity:bad_target"); // "You must have a valid player target to Propose Unity."
+			return 0;
+		}
+
+	} else if (selectedID == 24) { // Unbond
+		if (!sceneObject->isASubChildOf(player))
+			return 0;
+
+		PlayerManager* playerManager = player->getZoneServer()->getPlayerManager();
+
+		if (playerManager != NULL)
+			playerManager->promptUnbond(player);
+
+		return 0;
 	}
+
 
 	return TangibleObjectMenuComponent::handleObjectMenuSelect(sceneObject, player, selectedID);
 }
