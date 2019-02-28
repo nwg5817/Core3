@@ -257,6 +257,10 @@ class PlayerObject extends IntangibleObject {
 	protected int holoEmoteUseCount;
 
 	protected string spouseName;
+	
+	//Master Padawan Bond
+	protected string masterName;
+	protected string padawanName;			
 
 	@dereferenced
 	protected VectorMap<unsigned int, string> chosenVeteranRewards; // milestone, templateFile
@@ -1751,6 +1755,43 @@ class PlayerObject extends IntangibleObject {
 		spouseName = "";
 	}
 
+	//Master Padawan Bond
+	@read
+	public boolean isPadawanBonded(){
+		return masterName != "";
+	}
+
+	@read
+	public string getMasterName(){
+		return masterName;
+	}
+
+	public void setMasterName( string firstName ){
+		 masterName = firstName;
+	}
+
+	public void removeMaster(){
+		masterName = "";
+	}
+	
+	@read
+	public boolean isMasterBonded(){
+		return padawanName != "";
+	}
+
+	@read
+	public string getPadawanName(){
+		return padawanName;
+	}
+
+	public void setPadawanName( string firstName ){
+		 padawanName = firstName;
+	}
+
+	public void removePadawan(){
+		padawanName = "";
+	}
+	//End
 	@dirty
 	public Account getAccount() {
 		return account;

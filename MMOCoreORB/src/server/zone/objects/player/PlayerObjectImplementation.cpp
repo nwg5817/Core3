@@ -2310,6 +2310,34 @@ void PlayerObjectImplementation::destroyObjectFromDatabase(bool destroyContained
 			}
 		}
 	}
+
+	if (isPadawanBonded()) {
+		PlayerManager* playerManager = server->getPlayerManager();
+		ManagedReference<CreatureObject*> master = playerManager->getPlayer(masterName);
+
+		if (master != nullptr) {
+			PlayerObject* masterGhost = master->getPlayerObject();
+
+			if (masterGhost != nullptr) {
+				//RemoveBondTask* task = new RemoveBondTask(master);
+				//task->execute();
+			}
+		}
+	}
+
+	if (isMasterBonded()) {
+		PlayerManager* playerManager = server->getPlayerManager();
+		ManagedReference<CreatureObject*> padawan = playerManager->getPlayer(padawanName);
+
+		if (padawan != nullptr) {
+			PlayerObject* masterGhost = padawan->getPlayerObject();
+
+			if (masterGhost != nullptr) {
+				//RemoveBondTask* task = new RemoveBondTask(padawan);
+				//task->execute();
+			}
+		}
+	}
 }
 
 void PlayerObjectImplementation::deleteAllPersistentMessages() {

@@ -81,11 +81,14 @@
 
 #include "server/zone/objects/player/sui/callbacks/PlayerTeachSuiCallback.h"
 #include "server/zone/objects/player/sui/callbacks/PlayerTeachConfirmSuiCallback.h"
+#include "server/zone/objects/player/sui/callbacks/ProposeBondSuiCallback.h"
 #include "server/zone/objects/player/sui/callbacks/ProposeUnitySuiCallback.h"
 #include "server/zone/objects/player/sui/callbacks/SelectUnityRingSuiCallback.h"
+#include "server/zone/objects/player/sui/callbacks/SelectBondRingSuiCallback.h"
 #include "server/zone/objects/player/sui/callbacks/SelectVeteranRewardSuiCallback.h"
 #include "server/zone/objects/player/sui/callbacks/ConfirmVeteranRewardSuiCallback.h"
 #include "server/zone/objects/player/sui/callbacks/ConfirmDivorceSuiCallback.h"
+#include "server/zone/objects/player/sui/callbacks/ConfirmUnbondSuiCallback.h"
 
 #include "server/zone/managers/stringid/StringIdManager.h"
 #include "server/zone/objects/creature/buffs/PowerBoostBuff.h"
@@ -4450,6 +4453,360 @@ void PlayerManagerImplementation::grantDivorce(CreatureObject* player) {
 	}
 }
 
+//Jedi Master Bond
+//Master-Padawan Initial
+void PlayerManagerImplementation::proposeBond( CreatureObject* askingPlayer, CreatureObject* respondingPlayer, SceneObject* askingPlayerRing) {
+
+	if (!askingPlayer->isPlayerCreature()) {
+		return;
+	}
+
+	// Check if target is self
+	if (askingPlayer == respondingPlayer) {
+		askingPlayer->sendSystemMessage("@unity:bad_target"); // "You must have a valid player target to Propose Unity."
+		return;
+	}
+
+	// Check if target is a player
+	if (!respondingPlayer->isPlayerCreature()) {
+		askingPlayer->sendSystemMessage("@unity:bad_target"); // "You must have a valid player target to Propose Unity."
+		return;
+	}
+
+	Reference<PlayerObject*> askingGhost = askingPlayer->getPlayerObject();
+	Reference<PlayerObject*> respondingGhost = respondingPlayer->getPlayerObject();
+	if (askingGhost == NULL || respondingGhost == NULL) {
+		return;
+	}
+
+	// Check if askingPlayer is a Master
+	if (askingGhost->isMasterBonded()) {
+		StringIdChatParameter errAskerMarried;
+		errAskerMarried.setStringId("unity", "prose_already_married"); // "You cannot propose unity. You are already united with %TO."
+		errAskerMarried.setTO( askingGhost->getPadawanName() );
+		askingPlayer->sendSystemMessage(errAskerMarried );
+		return;
+	}
+
+	// Check if respondingPlayer is padawan
+	if (respondingGhost->isPadawanBonded()) {
+		askingPlayer->sendSystemMessage("@unity:target_married"); // "You cannot propose unity to someone who is already united."
+		return;
+	}
+
+	// Check distance
+	if (!respondingPlayer->isInRange( askingPlayer, 15.0 )) {
+		askingPlayer->sendSystemMessage("@unity:out_of_range"); // "Your target is too far away to properly propose!"
+		return;
+	}
+
+	if (!askingPlayer->isFacingObject(respondingPlayer)) {
+		askingPlayer->sendSystemMessage("@unity:bad_facing"); // "You must be facing your target to properly propose!"
+		return;
+	}
+
+	// Check if asking player has a proposal outstanding
+	if (askingPlayer->getActiveSession(SessionFacadeType::PROPOSEUNITY) != NULL) {
+		askingPlayer->sendSystemMessage("You already have an outstanding Force training proposal.");
+		return;
+	}
+
+	// Check if responding player has a proposal outstanding
+	if (respondingPlayer->getActiveSession(SessionFacadeType::PROPOSEUNITY) != NULL) {
+		askingPlayer->sendSystemMessage("@unity:target_proposed"); // "Your proposal target is already engaged in a unity proposal."
+		return;
+	}
+
+	//
+	// All checks passed
+	//
+
+	Locker rlocker( askingPlayer, respondingPlayer );
+
+	// Initialize session
+	ManagedReference<ProposeUnitySession*> askerUnitySession =
+			new ProposeUnitySession( askingPlayer->getObjectID(), respondingPlayer->getObjectID(), askingPlayerRing->getObjectID() );
+	askingPlayer->addActiveSession(SessionFacadeType::PROPOSEUNITY, askerUnitySession);
+
+	ManagedReference<ProposeUnitySession*> responderUnitySession =
+			new ProposeUnitySession( askingPlayer->getObjectID(), respondingPlayer->getObjectID(), askingPlayerRing->getObjectID() );
+	respondingPlayer->addActiveSession(SessionFacadeType::PROPOSEUNITY, responderUnitySession);
+
+	// Submit timeout task
+	Reference<Task*> askerExpiredTask = new ProposeUnityExpiredTask( askingPlayer );
+	askingPlayer->addPendingTask("propose_unity", askerExpiredTask, 60000); // 1 min
+
+	Reference<Task*> responderExpiredTask = new ProposeUnityExpiredTask( respondingPlayer );
+	respondingPlayer->addPendingTask("propose_unity", responderExpiredTask, 60000); // 1 min
+
+	// Build and send proposal window
+	ManagedReference<SuiMessageBox*> suiBox = new SuiMessageBox(respondingPlayer, SuiWindowType::PROPOSE_UNITY);
+	suiBox->setCallback(new ProposeBondSuiCallback(server));
+	suiBox->setPromptTitle("Accept Force Bond?"); // "Accept Unity Proposal?"
+	suiBox->setPromptText( askingPlayer->getCreatureName().toString() + " is offering to Force bond to you. Do you wish to accept?" );
+	suiBox->setUsingObject( askingPlayer );
+	suiBox->setCancelButton(true, "@no");
+	suiBox->setOkButton(true, "@yes");
+
+	respondingGhost->addSuiBox(suiBox);
+	respondingPlayer->sendMessage(suiBox->generateMessage());
+
+	// Send message to asking player
+	StringIdChatParameter proposalSent;
+	proposalSent.setStringId("unity", "prose_propose"); // "You propose unity to %TO."
+	proposalSent.setTO( respondingPlayer->getFirstName() );
+	askingPlayer->sendSystemMessage(proposalSent );
+
+}
+
+void PlayerManagerImplementation::denyBond( CreatureObject* respondingPlayer) {
+
+	if (respondingPlayer == NULL )
+		return;
+
+	// Check session
+	ManagedReference<ProposeUnitySession*> proposeUnitySession = respondingPlayer->getActiveSession(SessionFacadeType::PROPOSEUNITY).castTo<ProposeUnitySession*>();
+	if (proposeUnitySession == NULL) {
+		respondingPlayer->sendSystemMessage("@unity:expire_target"); // "The unity proposal extended to you has expired."
+		return;
+	}
+
+	// Pull asking player
+	uint64 targID = proposeUnitySession->getAskingPlayer();
+	ManagedReference<SceneObject*> obj = server->getObject(targID);
+	if (obj == NULL || !obj->isPlayerCreature()) {
+		respondingPlayer->sendSystemMessage("@unity:wed_error"); // "An error has occurred during the unity process."
+		return;
+	}
+
+	CreatureObject* askingPlayer = cast<CreatureObject*>( obj.get());
+	Locker alocker( askingPlayer, respondingPlayer );
+	askingPlayer->sendSystemMessage("@unity:declined"); // "Your unity proposal has been declined.")
+	respondingPlayer->sendSystemMessage("@unity:decline"); // "You decline the unity proposal.")
+
+	// Remove session
+	cancelProposeBondSession(respondingPlayer, askingPlayer);
+
+}
+
+void PlayerManagerImplementation::acceptBond( CreatureObject* respondingPlayer) {
+
+	if (respondingPlayer == NULL )
+		return;
+
+	// Check session
+	ManagedReference<ProposeUnitySession*> proposeUnitySession = respondingPlayer->getActiveSession(SessionFacadeType::PROPOSEUNITY).castTo<ProposeUnitySession*>();
+	if (proposeUnitySession == NULL) {
+		respondingPlayer->sendSystemMessage("@unity:expire_target"); // "The unity proposal extended to you has expired."
+		return;
+	}
+
+	// Pull asking player
+	uint64 targID = proposeUnitySession->getAskingPlayer();
+	ManagedReference<SceneObject*> obj = server->getObject(targID);
+	if (obj == NULL || !obj->isPlayerCreature()) {
+		respondingPlayer->sendSystemMessage("@unity:wed_error"); // "An error has occurred during the unity process."
+		return;
+	}
+
+	CreatureObject* askingPlayer = cast<CreatureObject*>( obj.get());
+	Locker alocker( askingPlayer, respondingPlayer );
+
+	// Check distance
+	if (!respondingPlayer->isInRange( askingPlayer, 15.0 )) {
+		askingPlayer->sendSystemMessage("@unity:wed_oor"); // "You must remain within 15 meters during the unity process for it to complete."
+		respondingPlayer->sendSystemMessage("@unity:wed_oor"); // "You must remain within 15 meters during the unity process for it to complete."
+		cancelProposeUnitySession(respondingPlayer, askingPlayer);
+		return;
+	}
+
+	// Check for a ring in player's inventory
+	ManagedReference<SceneObject*> inventory = respondingPlayer->getSlottedObject("inventory");
+	if (inventory == NULL) {
+		respondingPlayer->sendSystemMessage("@unity:wed_error"); // "An error has occurred during the unity process."
+		askingPlayer->sendSystemMessage("@unity:wed_error"); // "An error has occurred during the unity process."
+		cancelProposeBondSession(respondingPlayer, askingPlayer);
+		return;
+	}
+
+	bool hasRing = false;
+	for (int i = 0; i < inventory->getContainerObjectsSize(); i++) {
+		ManagedReference<WearableObject*> wearable = cast<WearableObject*>(inventory->getContainerObject(i).get());
+		if (wearable != NULL && wearable->getGameObjectType() == SceneObjectType::RING && !wearable->isEquipped()) {
+			hasRing = true;
+		}
+	}
+
+	// No ring found
+	if (!hasRing) {
+		askingPlayer->sendSystemMessage("@unity:accept_fail"); // "Your proposal target has no ring to offer in return."
+		respondingPlayer->sendSystemMessage("@unity:no_ring"); // "You cannot accept a unity proposal without a ring to offer."
+		cancelProposeBondSession(respondingPlayer, askingPlayer);
+		return;
+	}
+
+	// Build and send list box for ring selection
+	ManagedReference<SuiListBox*> box = new SuiListBox(respondingPlayer, SuiWindowType::SELECT_UNITY_RING, SuiListBox::HANDLETWOBUTTON);
+	box->setCallback(new SelectBondRingSuiCallback(server));
+	box->setPromptText("@unity:ring_prompt"); // "Select the ring you would like to offer, in return, for your unity."
+	box->setPromptTitle("Select Unity Ring");
+	box->setOkButton(true, "@ok");
+	box->setCancelButton(true, "@cancel");
+
+	for (int i = 0; i < inventory->getContainerObjectsSize(); i++) {
+		ManagedReference<WearableObject*> wearable = cast<WearableObject*>(inventory->getContainerObject(i).get());
+		if (wearable != NULL && wearable->getGameObjectType() == SceneObjectType::RING && !wearable->isEquipped() && !wearable->isNoTrade()) {
+			String itemName = wearable->getDisplayedName();
+			box->addMenuItem(itemName, wearable->getObjectID());
+		}
+	}
+
+	box->setUsingObject(respondingPlayer);
+	respondingPlayer->getPlayerObject()->addSuiBox(box);
+	respondingPlayer->sendMessage(box->generateMessage());
+
+}
+
+void PlayerManagerImplementation::completeBond( CreatureObject* respondingPlayer, unsigned long long respondingPlayerRingId) {
+
+	if (respondingPlayer == NULL )
+		return;
+
+	// Check session
+	ManagedReference<ProposeUnitySession*> proposeUnitySession = respondingPlayer->getActiveSession(SessionFacadeType::PROPOSEUNITY).castTo<ProposeUnitySession*>();
+	if (proposeUnitySession == NULL) {
+		respondingPlayer->sendSystemMessage("@unity:expire_target"); // "The unity proposal extended to you has expired."
+		return;
+	}
+
+	// Pull asking player
+	uint64 targID = proposeUnitySession->getAskingPlayer();
+	ManagedReference<SceneObject*> obj = server->getObject(targID);
+	if (obj == NULL || !obj->isPlayerCreature()) {
+		respondingPlayer->sendSystemMessage("@unity:wed_error"); // "An error has occurred during the unity process."
+		return;
+	}
+
+	CreatureObject* askingPlayer = cast<CreatureObject*>( obj.get());
+	Locker alocker( askingPlayer, respondingPlayer );
+
+	// Check distance
+	if (!respondingPlayer->isInRange( askingPlayer, 15.0 )) {
+		askingPlayer->sendSystemMessage("@unity:wed_oor"); // "You must remain within 15 meters during the unity process for it to complete."
+		respondingPlayer->sendSystemMessage("@unity:wed_oor"); // "You must remain within 15 meters during the unity process for it to complete."
+		cancelProposeBondSession(respondingPlayer, askingPlayer);
+		return;
+	}
+
+	// Find selected ring
+	ManagedReference<SceneObject*> respondingPlayerInventory = respondingPlayer->getSlottedObject("inventory");
+	ManagedReference<SceneObject*> askingPlayerInventory = askingPlayer->getSlottedObject("inventory");
+	if (respondingPlayerInventory == NULL || askingPlayerInventory == NULL) {
+		respondingPlayer->sendSystemMessage("@unity:wed_error"); // "An error has occurred during the unity process."
+		askingPlayer->sendSystemMessage("@unity:wed_error"); // "An error has occurred during the unity process."
+		cancelProposeBondSession(respondingPlayer, askingPlayer);
+		return;
+	}
+
+	// Find responder's ring
+	ManagedReference<WearableObject*> wearable = NULL;
+	ManagedReference<WearableObject*> respondingRing = NULL;
+	for (int i = 0; i < respondingPlayerInventory->getContainerObjectsSize(); i++) {
+		wearable = cast<WearableObject*>(respondingPlayerInventory->getContainerObject(i).get());
+		if (wearable != NULL && wearable->getObjectID() == respondingPlayerRingId && !wearable->isEquipped()) {
+			respondingRing = wearable;
+			break;
+		}
+	}
+
+	// Find asker's ring
+	wearable = NULL;
+	ManagedReference<WearableObject*> askingRing = NULL;
+	for (int i = 0; i < askingPlayerInventory->getContainerObjectsSize(); i++) {
+		wearable = cast<WearableObject*>(askingPlayerInventory->getContainerObject(i).get());
+		if (wearable != NULL && wearable->getObjectID() == proposeUnitySession->getAskingPlayerRing() && !wearable->isEquipped()) {
+			askingRing = wearable;
+			break;
+		}
+	}
+
+
+	// Rings not found
+	if (respondingRing == NULL || askingRing == NULL) {
+		askingPlayer->sendSystemMessage("@unity:accept_fail"); // "Your proposal target has no ring to offer in return."
+		respondingPlayer->sendSystemMessage("@unity:no_ring"); // "You cannot accept a unity proposal without a ring to offer."
+		cancelProposeBondSession(respondingPlayer, askingPlayer);
+		return;
+	}
+
+	// Exchange rings
+	ManagedReference<ObjectController*> objectController = server->getObjectController();
+	if (objectController->transferObject(askingRing, respondingPlayerInventory, -1, true, true)) { // Allow overflow
+		askingRing->sendDestroyTo(askingPlayer);
+		respondingPlayerInventory->broadcastObject(askingRing, true);
+	}
+
+	if (objectController->transferObject(respondingRing, askingPlayerInventory, -1, true, true)) { // Allow overflow
+		respondingRing->sendDestroyTo(respondingPlayer);
+		askingPlayerInventory->broadcastObject(respondingRing, true);
+	}
+
+	// Set married
+	String respondingPlayerName = respondingPlayer->getFirstName();
+	String askingPlayerName = askingPlayer->getFirstName();
+	askingPlayer->getPlayerObject()->setPadawanName( respondingPlayerName );
+	respondingPlayer->getPlayerObject()->setMasterName( askingPlayerName );
+
+	// Send obligatory congratulations
+	StringIdChatParameter congratsAsker;
+	congratsAsker.setStringId("unity", "prose_wed_complete"); //  "Your union with %TT is complete."
+	congratsAsker.setTT( respondingPlayer->getFirstName() );
+	askingPlayer->sendSystemMessage(congratsAsker );
+
+	StringIdChatParameter congratsResponder;
+	congratsResponder.setStringId("unity", "prose_wed_complete"); //  "Your union with %TT is complete."
+	congratsResponder.setTT( askingPlayer->getFirstName() );
+	respondingPlayer->sendSystemMessage(congratsResponder );
+
+	// Remove session
+	cancelProposeUnitySession(respondingPlayer, askingPlayer);
+
+}
+
+void PlayerManagerImplementation::cancelProposeBondSession(CreatureObject* respondingPlayer, CreatureObject* askingPlayer) {
+	askingPlayer->dropActiveSession(SessionFacadeType::PROPOSEUNITY);
+	respondingPlayer->dropActiveSession(SessionFacadeType::PROPOSEUNITY);
+	askingPlayer->removePendingTask( "propose_unity" );
+	respondingPlayer->removePendingTask( "propose_unity" );
+}
+
+void PlayerManagerImplementation::promptUnbond(CreatureObject* player) {
+	if (player == NULL || !player->isPlayerCreature())
+		return;
+
+	// Check if player is married
+	PlayerObject* playerGhost = player->getPlayerObject();
+
+	if (playerGhost == NULL)
+		return;
+
+	if (!playerGhost->isMasterBonded() && !playerGhost->isPadawanBonded()) {
+		player->sendSystemMessage("You are not Force bonded!");
+		return;
+	}
+
+	// Build and confirmation window
+	ManagedReference<SuiMessageBox*> suiBox = new SuiMessageBox(player, SuiWindowType::CONFIRM_DIVORCE);
+	suiBox->setCallback(new ConfirmUnbondSuiCallback(server));
+	suiBox->setPromptTitle("Confirm Unbond?");
+	suiBox->setPromptText("Do you wish to nullify your Force bond?");
+	suiBox->setCancelButton(true, "@no");
+	suiBox->setOkButton(true, "@yes");
+
+	playerGhost->addSuiBox(suiBox);
+	player->sendMessage(suiBox->generateMessage());
+}
+
 void PlayerManagerImplementation::claimVeteranRewards(CreatureObject* player) {
 
 	if (player == NULL || !player->isPlayerCreature() )
@@ -4579,6 +4936,83 @@ void PlayerManagerImplementation::confirmVeteranReward(CreatureObject* player, i
 		generateVeteranReward(player);
 	}
 
+}
+
+void PlayerManagerImplementation::grantUnbond(CreatureObject* player) {
+	if (player == NULL || !player->isPlayerCreature())
+		return;
+
+	// Check if player is married
+	PlayerObject* playerGhost = player->getPlayerObject();
+
+	if (playerGhost == NULL || (!playerGhost->isMasterBonded() && !playerGhost->isPadawanBonded()))
+		return;
+
+	if (playerGhost->isMasterBonded()){
+	// Find spouse
+	CreatureObject* spouse = getPlayer(playerGhost->getPadawanName());
+
+	StringIdChatParameter msg;
+	msg.setStringId("unity", "prose_end_unity"); // "Your union with %TO has ended."
+
+	// Remove spouse name from both players
+	if (spouse != NULL && spouse->isPlayerCreature()) {
+		Locker slocker(spouse, player);
+
+		PlayerObject* spouseGhost = spouse->getPlayerObject();
+
+		if (spouseGhost != NULL)
+			spouseGhost->removeMaster();
+
+		playerGhost->removePadawan();
+
+		msg.setTO(player->getFirstName());
+		spouse->sendSystemMessage(msg);
+
+		msg.setTO(spouse->getFirstName());
+		player->sendSystemMessage(msg);
+
+	} else {
+		// If spouse player is null (perhaps it's been deleted), we can still remove the spouse from the current player
+		msg.setTO(playerGhost->getPadawanName());
+		player->sendSystemMessage(msg);
+
+		playerGhost->removePadawan();
+		}
+	}
+	//Padawan removing master
+	if (playerGhost->isPadawanBonded()){
+	// Find spouse
+	CreatureObject* spouse = getPlayer(playerGhost->getMasterName());
+
+	StringIdChatParameter msg;
+	msg.setStringId("unity", "prose_end_unity"); // "Your union with %TO has ended."
+
+	// Remove spouse name from both players
+	if (spouse != NULL && spouse->isPlayerCreature()) {
+		Locker slocker(spouse, player);
+
+		PlayerObject* spouseGhost = spouse->getPlayerObject();
+
+		if (spouseGhost != NULL)
+			spouseGhost->removePadawan();
+
+		playerGhost->removeMaster();
+
+		msg.setTO(player->getFirstName());
+		spouse->sendSystemMessage(msg);
+
+		msg.setTO(spouse->getFirstName());
+		player->sendSystemMessage(msg);
+
+	} else {
+		// If spouse player is null (perhaps it's been deleted), we can still remove the spouse from the current player
+		msg.setTO(playerGhost->getMasterName());
+		player->sendSystemMessage(msg);
+
+		playerGhost->removeMaster();
+		}
+	}
 }
 
 void PlayerManagerImplementation::generateVeteranReward(CreatureObject* player) {
