@@ -1,5 +1,5 @@
 /*
- * ProposeUnitySuiCallback.h
+ * ProposeBondSuiCallback.h
  *
  *  Created on: 5/2/2014
  *      Author: Klivian
@@ -35,4 +35,4 @@ public:
 	}
 };
 
-#endif /* PROPOSEUNITYSUICALLBACK_H_ */
+#endif /* PROPOSEBONDSUICALLBACK_H_ */

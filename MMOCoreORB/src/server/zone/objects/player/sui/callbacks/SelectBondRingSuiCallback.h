@@ -1,5 +1,5 @@
 /*
- * SelectUnityRingSuiCallback.h
+ * SelectBondRingSuiCallback.h
  *
  *  Created on: 5/3/2014
  *      Author: Klivian
@@ -26,7 +26,7 @@ public:
 			return;
 
 		if( cancelPressed ){
-			playerManager->denyUnity( player );
+			playerManager->denyBond( player );
 			return;
 		}
 
@@ -38,11 +38,11 @@ public:
 		SuiListBox* listBox = cast<SuiListBox*>( suiBox);
 		uint64 itemId = listBox->getMenuObjectID(index);
 
-		// Finalize unity proposal
+		// Finalize bond proposal
 		playerManager->completeBond( player, itemId );
 
 	}
 };
 
 
-#endif /* SELECTUNITYRINGSUICALLBACK_H_ */
+#endif /* SELECTBONDRINGSUICALLBACK_H_ */
