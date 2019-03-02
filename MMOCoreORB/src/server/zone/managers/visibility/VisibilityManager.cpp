@@ -51,15 +51,40 @@ float VisibilityManager::calculateVisibilityIncrease(CreatureObject* creature) {
 		if (!creature->isInRange(c, 32) || !CollisionManager::checkLineOfSight(creature, c))
 			continue;
 
+		PlayerObject* playerJedi = creature->getPlayerObject();
+
+		//creature = player, c = random mob
+		if ((playerJedi->isPadawanBonded() || playerJedi->isMasterBonded()) && c->isPlayerCreature()){
+			PlayerObject* playerCreature = c->getPlayerObject();
+			if (playerJedi->isMasterBonded() && playerCreature->isPadawanBonded()){
+				String player = creature->getFirstName();
+				String mastername = playerCreature->getMasterName();
+				if (player == mastername)
+					continue;
+			}
+			else if (playerJedi->isPadawanBonded() && playerCreature->isMasterBonded()){
+				String player = creature->getFirstName();
+				String padawanname = playerCreature->getPadawanName();
+				if (player == padawanname)
+					continue;
+			}
+		}
+
 		if (creature->getFaction() == 0 || (c->getFaction() != factionImperial && c->getFaction() != factionRebel)) {
 			visibilityIncrease += 0.5;
+			creature->playEffect("clienteffect/frs_dark_envy.cef");
+			creature->sendSystemMessage("You have gained Visibility!");
 			//info(c->getCreatureName().toString() + " generating a 0.5 visibility modifier", true);
 		} else {
 			if (creature->getFaction() == c->getFaction()) {
 				visibilityIncrease += 0.25;
+				creature->playEffect("clienteffect/frs_dark_envy.cef");
+				creature->sendSystemMessage("You have gained Visibility!");
 				//info(c->getCreatureName().toString() + " generating a 0.25 visibility modifier", true);
 			} else {
 				visibilityIncrease += 1;
+				creature->playEffect("clienteffect/frs_dark_envy.cef");
+				creature->sendSystemMessage("You have gained Visibility!");
 				//info( c->getCreatureName().toString() + " generating a 1.0 visibility modifier", true);
 			}
 		}

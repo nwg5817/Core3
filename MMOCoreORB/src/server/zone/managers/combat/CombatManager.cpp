@@ -1635,8 +1635,15 @@ int CombatManager::getHitChance(TangibleObject* attacker, CreatureObject* target
 		if (def == "saber_block") {
 			if (!(attacker->isTurret() || weapon->isThrownWeapon()) && ((weapon->isHeavyWeapon() || weapon->isSpecialHeavyWeapon() || (weapon->getAttackType() == SharedWeaponObjectTemplate::RANGEDATTACK)) && ((System::random(100)) < targetCreature->getSkillMod(def))))
 				return RICOCHET;
-			else if (((weapon->getAttackType() == SharedWeaponObjectTemplate::MELEEATTACK)) && ((System::random(100)) < targetCreature->getSkillMod("saber_acuity")))
-				return System::random(2) + 2;
+			else if (((weapon->getAttackType() == SharedWeaponObjectTemplate::MELEEATTACK)) && ((System::random(100)) < targetCreature->getSkillMod("saber_acuity"))){
+				int randRoll = System::random(2);
+				switch (randRoll) {
+				case 0: return BLOCK;
+				case 1: return DODGE;
+				case 2:
+				default: return COUNTER;
+				}
+			}
 			else return HIT;
 		}
 
