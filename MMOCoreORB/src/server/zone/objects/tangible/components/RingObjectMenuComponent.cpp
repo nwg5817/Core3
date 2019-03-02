@@ -39,14 +39,13 @@ void RingObjectMenuComponent::fillObjectMenuResponse(SceneObject* sceneObject, O
 	}
 
 	if (!wearable->isEquipped() && !wearable->isNoTrade()) {
-		if (ghost->isMasterBonded() || ghost->isPadawanBonded()) {
-			menuResponse->addRadialMenuItem(235, 3, "Break Force Bond"); // Divorce
-		} else if (player->hasSkill("force_title_jedi_rank_03")){
+		if (ghost->isPadawanBonded() || ghost->isMasterBonded()) {
+			menuResponse->addRadialMenuItem(24, 3, "Unbond");
+		} else {
 			uint64 targetID = player->getTargetID();
 			ManagedReference<CreatureObject*> target = server->getObject(targetID, true).castTo<CreatureObject*>();
-
 			if (target != NULL && target->isPlayerCreature())
-				menuResponse->addRadialMenuItem(23, 3, "Force Bond"); // Propose Unity
+				menuResponse->addRadialMenuItem(199, 3, "Force Bond"); // Propose Unity
 		}
 	}
 
@@ -55,17 +54,14 @@ void RingObjectMenuComponent::fillObjectMenuResponse(SceneObject* sceneObject, O
 }
 
 int RingObjectMenuComponent::handleObjectMenuSelect(SceneObject* sceneObject, CreatureObject* player, byte selectedID) const {
-	ManagedReference<SceneObject*> target = player->getZoneServer()->getObject(player->getTargetID());
-	PlayerManager* playerManager = player->getZoneServer()->getPlayerManager();
+	if (selectedID == 22) { // Propose Unity
+		if (!sceneObject->isASubChildOf(player))
+			return 0;
 
-	if (!sceneObject->isASubChildOf(player))
-		return 0;
-
-	switch (selectedID) {
-
-	case 22: // Propose Unity
+		ManagedReference<SceneObject*> target = player->getZoneServer()->getObject(player->getTargetID());
 
 		if (target != NULL && target->isPlayerCreature()) {
+			PlayerManager* playerManager = player->getZoneServer()->getPlayerManager();
 
 			if (playerManager != NULL)
 				playerManager->proposeUnity(player, cast<CreatureObject*>(target.get()), sceneObject);
@@ -76,9 +72,25 @@ int RingObjectMenuComponent::handleObjectMenuSelect(SceneObject* sceneObject, Cr
 			return 0;
 		}
 
-	case 23: // Propose Force Bond
+	} else if (selectedID == 234) { // Divorce
+		if (!sceneObject->isASubChildOf(player))
+			return 0;
+
+		PlayerManager* playerManager = player->getZoneServer()->getPlayerManager();
+
+		if (playerManager != NULL)
+			playerManager->promptDivorce(player);
+
+		return 0;
+
+	} else if (selectedID == 199) { // Propose Bond
+		if (!sceneObject->isASubChildOf(player))
+			return 0;
+
+		ManagedReference<SceneObject*> target = player->getZoneServer()->getObject(player->getTargetID());
 
 		if (target != NULL && target->isPlayerCreature()) {
+			PlayerManager* playerManager = player->getZoneServer()->getPlayerManager();
 
 			if (playerManager != NULL)
 				playerManager->proposeBond(player, cast<CreatureObject*>(target.get()), sceneObject);
@@ -89,21 +101,18 @@ int RingObjectMenuComponent::handleObjectMenuSelect(SceneObject* sceneObject, Cr
 			return 0;
 		}
 
-	case 234: // Divorce
+	} else if (selectedID == 24) { // Unbond
+		if (!sceneObject->isASubChildOf(player))
+			return 0;
 
-		if (playerManager != NULL)
-			playerManager->promptDivorce(player);
-
-		return 0;
-
-	case 235: // Force Unbond
+		PlayerManager* playerManager = player->getZoneServer()->getPlayerManager();
 
 		if (playerManager != NULL)
 			playerManager->promptUnbond(player);
 
 		return 0;
-
 	}
+
 
 	return TangibleObjectMenuComponent::handleObjectMenuSelect(sceneObject, player, selectedID);
 }
