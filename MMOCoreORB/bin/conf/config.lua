@@ -143,6 +143,7 @@ TrePath = "/home/swgemu/Desktop/SWGEmu"
 
 TreFiles = {
 	"default_patch.tre",
+	"testing_1.tre",
 	"patch_sku1_14_00.tre",
 	"patch_14_00.tre",
 	"patch_sku1_13_00.tre",
