@@ -40,8 +40,8 @@ void RingObjectMenuComponent::fillObjectMenuResponse(SceneObject* sceneObject, O
 
 	if (!wearable->isEquipped() && !wearable->isNoTrade()) {
 		if (ghost->isPadawanBonded() || ghost->isMasterBonded()) {
-			menuResponse->addRadialMenuItem(24, 3, "Unbond");
-		} else {
+			menuResponse->addRadialMenuItem(24, 3, "Break Force Bond");
+		} else if (player->hasSkill("force_title_jedi_rank_03")){
 			uint64 targetID = player->getTargetID();
 			ManagedReference<CreatureObject*> target = server->getObject(targetID, true).castTo<CreatureObject*>();
 			if (target != NULL && target->isPlayerCreature())

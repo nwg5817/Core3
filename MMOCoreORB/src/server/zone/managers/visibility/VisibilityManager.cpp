@@ -51,22 +51,17 @@ float VisibilityManager::calculateVisibilityIncrease(CreatureObject* creature) {
 		if (!creature->isInRange(c, 32) || !CollisionManager::checkLineOfSight(creature, c))
 			continue;
 
-		PlayerObject* playerJedi = creature->getPlayerObject();
-
 		//creature = player, c = random mob
-		if ((playerJedi->isPadawanBonded() || playerJedi->isMasterBonded()) && c->isPlayerCreature()){
-			PlayerObject* playerCreature = c->getPlayerObject();
-			if (playerJedi->isMasterBonded() && playerCreature->isPadawanBonded()){
-				String player = creature->getFirstName();
-				String mastername = playerCreature->getMasterName();
-				if (player == mastername)
-					continue;
-			}
-			else if (playerJedi->isPadawanBonded() && playerCreature->isMasterBonded()){
-				String player = creature->getFirstName();
-				String padawanname = playerCreature->getPadawanName();
-				if (player == padawanname)
-					continue;
+		if (creature->isPlayerCreature() && c->isPlayerCreature()){
+			PlayerObject* playerJedi = creature->getPlayerObject();
+			if ((playerJedi->isPadawanBonded() || playerJedi->isMasterBonded())){
+				PlayerObject* playerCreature = c->getPlayerObject();
+					if ((playerJedi->isMasterBonded() && playerCreature->isPadawanBonded()) && (creature->getFirstName() == playerCreature->getMasterName())){
+						continue;
+					}
+					if ((playerJedi->isPadawanBonded() && playerCreature->isMasterBonded()) && (playerCreature->getPadawanName() == creature->getFirstName())){
+						continue;
+					}
 			}
 		}
 
