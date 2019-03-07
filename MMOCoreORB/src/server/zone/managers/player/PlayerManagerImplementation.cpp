@@ -819,14 +819,15 @@ void PlayerManagerImplementation::killPlayer(TangibleObject* attacker, CreatureO
 	player->sendSystemMessage(stringId);
 
 	player->updateTimeOfDeath();
-	player->clearBuffs(true, false);
+//  Let's not clear players buffs m'kay?
+//	player->clearBuffs(true, false);
 
 	PlayerObject* ghost = player->getPlayerObject();
 
 	if (ghost != NULL) {
 		ghost->resetIncapacitationTimes();
 		if (ghost->hasPvpTef()) {
-			ghost->schedulePvpTefRemovalTask(true, true);
+			ghost->schedulePvpTefRemovalTask(true, true, true);
 		}
 	}
 
